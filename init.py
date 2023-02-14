@@ -111,7 +111,6 @@ def list_lables():
     result=gmailapis.listLableId()
     return (result)
 
-
 @app.route('/delete_lable',methods=["POST"])
 def delete_lable():
     _json=request.form
@@ -125,7 +124,6 @@ def get_message_ids_of_lable():
     preLable=_json['lableName']
     result=gmailapis.getMessageIdsOfThatLable(preLable)
     return (result)
-
 
 @app.route('/modify_lable',methods=["POST"])
 def modify_lable():
