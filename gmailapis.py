@@ -2,6 +2,7 @@ from email import encoders, parser
 from email.mime.audio import MIMEAudio
 from email.mime.base import MIMEBase
 from email.mime.image import MIMEImage
+import enum
 import io
 import mimetypes
 import psycopg2
@@ -32,7 +33,7 @@ from Google import Create_Service
 import base64
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-
+# from google.oauth2.credentials import AccessTokenCredentials
 import google.auth
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -51,6 +52,14 @@ import time
 import datetime
 from datetime import datetime
 
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
+from google.oauth2 import id_token
+import google.auth.credentials
+from google.auth.transport.requests import AuthorizedSession
+
+connection = psycopg2.connect(user="postgres",password="root",host="localhost",port="5433",database="postgres")
+cursor = connection.cursor()
 
 # app.config['SECRET_KEY']='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'
 # app.config['SESSION_PERMANENT']=False
@@ -83,7 +92,6 @@ def exchange_code(authorization_code):
   except:
       print("sorry")
 
-
 def get_user_info(credentials):
   """Send a request to the UserInfo API to retrieve the user's information.
 
@@ -105,9 +113,12 @@ def get_user_info(credentials):
 
 def gmail_auth():
     try:
+        client_secrets_file = os.path.join(pathlib.Path(__file__).parent, "credentials.json")
         home_dir=os.path.expanduser('~')
-        flow=InstalledAppFlow.from_client_secrets_file('credentials.json',SCOPES)
-        print(flow)
+        flow =InstalledAppFlow.from_client_secrets_file(client_secrets_file=client_secrets_file,scopes=SCOPES,
+        redirect_uri="http://127.0.0.1:5000/callback")
+        authorization_url, state = flow.authorization_url()
+        print(authorization_url)
         creds=flow.run_local_server(port=5001)
         pickle_path=os.path.join(home_dir,'gmail.pickle')
 
@@ -131,24 +142,30 @@ def gmail_auth():
         # global_creds.append(global_creds_set)
         # print(global_creds)
         # print(global_creds_set)
-        return 'Authentication Done successfuly'
+        return authorization_url
     except Exception as ex:
         print(ex)
         return str(ex)
 
-def send_message(mailid,cc,bcc,subject,body,file):
+def send_message(email,mailid,cc,bcc,subject,body,file):
+    cursor.execute("SELECT * FROM token WHERE useremail = %s", (email,))
+    row=cursor.fetchone()
+    reto=row[1]
     msg=send_message_with_Attachment(mailid,cc,bcc,subject,body,file)
     try:
-        client_secrets_file = os.path.join(pathlib.Path(__file__).parent, "credentials.json")
-        flow = Flow.from_client_secrets_file(
-        client_secrets_file=client_secrets_file,
-        scopes=["https://www.googleapis.com/auth/userinfo.profile", "https://www.googleapis.com/auth/userinfo.email", "openid"]
-        # redirect_uri="http://127.0.0.1:5000/callback"
-)
-        authorization_url, state = flow.authorization_url()
-        service =Create_Service(CLIENT_SECRET_FILE, API_NAME, API_VERSION, SCOPES)
-
+#         client_secrets_file = os.path.join(pathlib.Path(__file__).parent, "credentials.json")
+#         flow = Flow.from_client_secrets_file(
+#         client_secrets_file=client_secrets_file,
+#         scopes=["https://www.googleapis.com/auth/userinfo.profile", "https://www.googleapis.com/auth/userinfo.email", "openid"]
+#         # redirect_uri="http://127.0.0.1:5000/callback"
+# )
+#         # try to 
+#         authorization_url, state = flow.authorization_url()
+#         print(authorization_url)
+#         service =Create_Service(CLIENT_SECRET_FILE, API_NAME, API_VERSION, SCOPES)
         # message = service.users().messages().send(userId='me', body={'raw': raw_string}).execute()
+        creds = AccessTokenCredentials(reto, 'my-user-agent/1.0')
+        service = build('gmail', 'v1', credentials=creds)
         draft = service.users().messages().send(userId="me",body=msg).execute()
         print(draft)
         print("Message sent successfuly!!!!")
@@ -385,14 +402,15 @@ def getProfile():
 
     authorization_url, state = flow.authorization_url()
     service =Create_Service(CLIENT_SECRET_FILE, API_NAME, API_VERSION, SCOPES)
-    dict=profile = service.users().getProfile(userId='me').execute()
-    # result={
-    #     "ThreadTotal":dict['threadsTotal'], to get particular value from dictionary object like dict['emailAddress']
-    #     "emailAddress":dict['emailAddress'],
-    #     "historyId":dict['historyId'],
-    #     "messageTotal":dict['messagesTotal']
-    # }
-    # print(result)
+    dict=service.users().getProfile(userId='me').execute()
+    # to get particular value from dictionary object like dict['emailAddress']
+    result={
+        "ThreadTotal":dict['threadsTotal'], 
+        "emailAddress":dict['emailAddress'],
+        "historyId":dict['historyId'],
+        "messageTotal":dict['messagesTotal'],
+    }
+    return result
     
 def getThread():
     client_secrets_file = os.path.join(pathlib.Path(__file__).parent, "credentials.json")
@@ -442,7 +460,6 @@ def createLable(Lablename):
     result="lable created"
     return result
 
-# DONE IN MODIFY LABLE METHOD BY GIVING NO PARAMETER IN CHANGELABLEID PARAMETER
 def listLableId():
     client_secrets_file = os.path.join(pathlib.Path(__file__).parent, "credentials.json")
     flow = Flow.from_client_secrets_file(
@@ -645,3 +662,141 @@ def deleteDrafts(draftId):
         "message":"deleted successufuly!!"
     }
     return result
+
+def sendDrafts(DraftId):
+    client_secrets_file = os.path.join(pathlib.Path(__file__).parent, "credentials.json")
+    flow = Flow.from_client_secrets_file(
+    client_secrets_file=client_secrets_file,
+    scopes=["https://www.googleapis.com/auth/userinfo.profile", "https://www.googleapis.com/auth/userinfo.email", "openid"])
+        # redirect_uri="http://127.0.0.1:5000/callback"
+    authorization_url, state = flow.authorization_url()
+    
+    service =Create_Service(CLIENT_SECRET_FILE, API_NAME, API_VERSION, SCOPES)
+    # draft = service.users().drafts().send(userId="me",body={ 'id': DraftId }).execute()
+    draft=service.users().drafts().send(userId='me', body={ 'id': DraftId }).execute()
+    result="sent"
+    return draft['id']
+
+def updateLanguage():
+    client_secrets_file = os.path.join(pathlib.Path(__file__).parent, "credentials.json")
+    flow = Flow.from_client_secrets_file(
+    client_secrets_file=client_secrets_file,
+    scopes=["https://www.googleapis.com/auth/userinfo.profile", "https://www.googleapis.com/auth/userinfo.email", "openid"])
+        # redirect_uri="http://127.0.0.1:5000/callback"
+    authorization_url, state = flow.authorization_url()
+    
+    service =Create_Service(CLIENT_SECRET_FILE, API_NAME, API_VERSION, SCOPES)
+    language=service.users().settings().updateLanguage(userId='me',body=None).execute()
+    
+def getLanguage():
+    client_secrets_file = os.path.join(pathlib.Path(__file__).parent, "credentials.json")
+    flow = Flow.from_client_secrets_file(
+    client_secrets_file=client_secrets_file,
+    scopes=["https://www.googleapis.com/auth/userinfo.profile", "https://www.googleapis.com/auth/userinfo.email", "openid"])
+        # redirect_uri="http://127.0.0.1:5000/callback"
+    authorization_url, state = flow.authorization_url()
+    
+    service =Create_Service(CLIENT_SECRET_FILE, API_NAME, API_VERSION, SCOPES)
+    language=service.users().settings().getLanguage(userId='me').execute()
+    return language['displayLanguage']
+
+def updatePop(access,diss):
+    # client_secrets_file = os.path.join(pathlib.Path(__file__).parent, "credentials.json")
+    # flow = Flow.from_client_secrets_file(
+    # client_secrets_file=client_secrets_file,
+    # scopes=["https://www.googleapis.com/auth/userinfo.profile", "https://www.googleapis.com/auth/userinfo.email", "openid"])
+    #     # redirect_uri="http://127.0.0.1:5000/callback"
+    # authorization_url, state = flow.authorization_url()
+    
+    # service =Create_Service(CLIENT_SECRET_FILE, API_NAME, API_VERSION, SCOPES)
+    # pop=service.users().settings().updatePop(userId='me',body={ 'accessWindow': access,'disposition': diss}).execute()
+    # return "hello"
+    client_secrets_file = os.path.join(pathlib.Path(__file__).parent, "credentials.json")
+    flow = Flow.from_client_secrets_file(
+    client_secrets_file=client_secrets_file,
+    scopes=["https://www.googleapis.com/auth/userinfo.profile", "https://www.googleapis.com/auth/userinfo.email", "openid"])
+        # redirect_uri="http://127.0.0.1:5000/callback"
+    authorization_url, state = flow.authorization_url()
+    
+    service =Create_Service(CLIENT_SECRET_FILE, API_NAME, API_VERSION, SCOPES)
+    pop=service.users().settings().updatePop(userId='me',body=None).execute()
+    return pop['disposition']
+
+
+
+def getPop():
+    client_secrets_file = os.path.join(pathlib.Path(__file__).parent, "credentials.json")
+    flow = Flow.from_client_secrets_file(
+    client_secrets_file=client_secrets_file,
+    scopes=["https://www.googleapis.com/auth/userinfo.profile", "https://www.googleapis.com/auth/userinfo.email", "openid"])
+        # redirect_uri="http://127.0.0.1:5000/callback"
+    authorization_url, state = flow.authorization_url()
+    
+    service =Create_Service(CLIENT_SECRET_FILE, API_NAME, API_VERSION, SCOPES)
+    pop=service.users().settings().getPop(userId='me').execute()
+    return pop['disposition']
+
+def updateImap():
+    client_secrets_file = os.path.join(pathlib.Path(__file__).parent, "credentials.json")
+    flow = Flow.from_client_secrets_file(
+    client_secrets_file=client_secrets_file,
+    scopes=["https://www.googleapis.com/auth/userinfo.profile", "https://www.googleapis.com/auth/userinfo.email", "openid"])
+        # redirect_uri="http://127.0.0.1:5000/callback"
+    authorization_url, state = flow.authorization_url()
+    dict={}
+    service =Create_Service(CLIENT_SECRET_FILE, API_NAME, API_VERSION, SCOPES)
+    imap=service.users().settings().updateImap(userId='me',body=None).execute()
+    # dict['enabled']=imap['enabled']
+    # dict['expungeBehavior']=imap['expungeBehavior']
+    # dict['enabled']=imap['enabled']
+    # dict['maxFolderSize']=imap['maxFolderSize']
+    print("hello")
+    return dict
+ 
+def getImap():
+    client_secrets_file = os.path.join(pathlib.Path(__file__).parent, "credentials.json")
+    flow = Flow.from_client_secrets_file(
+    client_secrets_file=client_secrets_file,
+    scopes=["https://www.googleapis.com/auth/userinfo.profile", "https://www.googleapis.com/auth/userinfo.email", "openid"])
+        # redirect_uri="http://127.0.0.1:5000/callback"
+    authorization_url, state = flow.authorization_url()
+    dict={}
+    service =Create_Service(CLIENT_SECRET_FILE, API_NAME, API_VERSION, SCOPES)
+    imap=service.users().settings().getImap(userId='me').execute()
+    dict['enabled']=imap['enabled']
+    dict['expungeBehavior']=imap['expungeBehavior']
+    dict['enabled']=imap['enabled']
+    dict['maxFolderSize']=imap['maxFolderSize']
+    return dict
+
+def createSendAs():
+    client_secrets_file = os.path.join(pathlib.Path(__file__).parent, "credentials.json")
+    flow = Flow.from_client_secrets_file(
+    client_secrets_file=client_secrets_file,
+    scopes=["https://www.googleapis.com/auth/userinfo.profile", "https://www.googleapis.com/auth/userinfo.email","https://www.googleapis.com/auth/gmail.settings.sharing","openid"])
+        # redirect_uri="http://127.0.0.1:5000/callback"
+    authorization_url, state = flow.authorization_url()
+    service =Create_Service(CLIENT_SECRET_FILE, API_NAME, API_VERSION, SCOPES)
+    
+    create_body={
+  "displayName": "hagnosoftSoftwareDeveloper",
+  "isDefault": "true",
+  "isPrimary": "true",
+  "replyToAddress": "alpeshpatilalpesh91",
+  "sendAsEmail": "alpesh.patil@creysto.com",
+  "signature": "https://www.any-api.com/googleapis_com/gmail/docs/users/gmail_users_settings_sendAs_create",
+  "smtpMsa": {
+    "host": "mail.smtpeter.com",
+    "password": "alpesh18.,AE",
+    "port": 0,
+    "securityMode": "none",
+    "username": "alpesh patil alpesh"
+  },
+  "treatAsAlias": "true",
+  "verificationStatus": "accepted"
+}
+    
+    create_send=service.users().settings().sendAs().create(userId='me',body=create_body).execute()
+    return "Created"
+    
+  
