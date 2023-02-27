@@ -213,8 +213,7 @@ def send_message():
     subject=_json['sub']
     body=_json['body']
     file=request.files['fileName']
-    email=_json['email']
-    result=gmailapis.send_message(email,mailid,cc,bcc,subject,body,file)
+    result=gmailapis.send_message(mailid,cc,bcc,subject,body,file)
     return result
 
 # @app.route('/get_labels',methods=['Get',"POST"])

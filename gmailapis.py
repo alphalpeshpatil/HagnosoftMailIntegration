@@ -147,25 +147,19 @@ def gmail_auth():
         print(ex)
         return str(ex)
 
-def send_message(email,mailid,cc,bcc,subject,body,file):
-    cursor.execute("SELECT * FROM token WHERE useremail = %s", (email,))
-    row=cursor.fetchone()
-    reto=row[1]
+def send_message(mailid,cc,bcc,subject,body,file):
     msg=send_message_with_Attachment(mailid,cc,bcc,subject,body,file)
     try:
-#         client_secrets_file = os.path.join(pathlib.Path(__file__).parent, "credentials.json")
-#         flow = Flow.from_client_secrets_file(
-#         client_secrets_file=client_secrets_file,
-#         scopes=["https://www.googleapis.com/auth/userinfo.profile", "https://www.googleapis.com/auth/userinfo.email", "openid"]
-#         # redirect_uri="http://127.0.0.1:5000/callback"
-# )
-#         # try to 
-#         authorization_url, state = flow.authorization_url()
-#         print(authorization_url)
-#         service =Create_Service(CLIENT_SECRET_FILE, API_NAME, API_VERSION, SCOPES)
+        client_secrets_file = os.path.join(pathlib.Path(__file__).parent, "credentials.json")
+        flow = Flow.from_client_secrets_file(
+        client_secrets_file=client_secrets_file,
+        scopes=["https://www.googleapis.com/auth/userinfo.profile", "https://www.googleapis.com/auth/userinfo.email", "openid"]
+        # redirect_uri="http://127.0.0.1:5000/callback"
+)
+        authorization_url, state = flow.authorization_url()
+        service =Create_Service(CLIENT_SECRET_FILE, API_NAME, API_VERSION, SCOPES)
+
         # message = service.users().messages().send(userId='me', body={'raw': raw_string}).execute()
-        creds = AccessTokenCredentials(reto, 'my-user-agent/1.0')
-        service = build('gmail', 'v1', credentials=creds)
         draft = service.users().messages().send(userId="me",body=msg).execute()
         print(draft)
         print("Message sent successfuly!!!!")
